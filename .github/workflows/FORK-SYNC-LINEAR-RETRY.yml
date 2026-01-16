@@ -40,7 +40,7 @@ jobs:
       - name: Apply linear retry patch
         run: |
           # Add early return to bypass all header logic and exponential backoff
-          sed -i '27a\  return RETRY_INITIAL_DELAY' packages/opencode/src/session/retry.ts
+          sed -i '/export function delay(attempt: number, error?: MessageV2.APIError) {/a\  return RETRY_INITIAL_DELAY' packages/opencode/src/session/retry.ts
 
       - name: Verify patch applied
         run: |
