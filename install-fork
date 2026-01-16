@@ -2,6 +2,9 @@
 set -euo pipefail
 APP=opencode
 
+# Original script with minimal modifications
+REPO_OWNER="dra11y"  # Only change: your GitHub username instead of anomalyco
+
 MUTED='\033[0;2m'
 RED='\033[0;31m'
 ORANGE='\033[38;5;214m'
@@ -9,7 +12,7 @@ NC='\033[0m' # No Color
 
 usage() {
     cat <<EOF
-OpenCode Installer
+OpenCode Fork Installer (dra11y fork with linear retry patch)
 
 Usage: install.sh [options]
 
@@ -20,8 +23,8 @@ Options:
         --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
 
 Examples:
-    curl -fsSL https://opencode.ai/install | bash
-    curl -fsSL https://opencode.ai/install | bash -s -- --version 1.0.180
+    curl -fsSL https://raw.githubusercontent.com/dra11y/opencode/linear-retry/install | bash
+    curl -fsSL https://raw.githubusercontent.com/dra11y/opencode/linear-retry/install | bash -s -- --version 1.0.180
     ./install --binary /path/to/opencode
 EOF
 }
@@ -153,7 +156,6 @@ else
 
     filename="$APP-$target$archive_ext"
 
-
     if [ "$os" = "linux" ]; then
         if ! command -v tar >/dev/null 2>&1; then
              echo -e "${RED}Error: 'tar' is required but not installed.${NC}"
@@ -167,9 +169,8 @@ else
     fi
 
     if [ -z "$requested_version" ]; then
-        # Change this line to point to your fork instead of anomalyco
-url="https://github.com/dra11y/opencode/releases/latest/download/$filename"
-        specific_version=$(curl -s https://api.github.com/repos/dra11y/opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+        url="https://github.com/$REPO_OWNER/opencode/releases/latest/download/$filename"
+        specific_version=$(curl -s https://api.github.com/repos/$REPO_OWNER/opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
 
         if [[ $? -ne 0 || -z "$specific_version" ]]; then
             echo -e "${RED}Failed to fetch version information${NC}"
@@ -178,14 +179,14 @@ url="https://github.com/dra11y/opencode/releases/latest/download/$filename"
     else
         # Strip leading 'v' if present
         requested_version="${requested_version#v}"
-        url="https://github.com/dra11y/opencode/releases/download/v${requested_version}/$filename"
+        url="https://github.com/$REPO_OWNER/opencode/releases/download/v${requested_version}/$filename"
         specific_version=$requested_version
 
-        # Verify the release exists before downloading
-        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/anomalyco/opencode/releases/tag/v${requested_version}")
+        # Verify release exists before downloading
+        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/$REPO_OWNER/opencode/releases/tag/v${requested_version}")
         if [ "$http_status" = "404" ]; then
             echo -e "${RED}Error: Release v${requested_version} not found${NC}"
-            echo -e "${MUTED}Available releases: https://github.com/anomalyco/opencode/releases${NC}"
+            echo -e "${MUTED}Available releases: https://github.com/$REPO_OWNER/opencode/releases${NC}"
             exit 1
         fi
     fi
@@ -209,7 +210,7 @@ check_version() {
     if command -v opencode >/dev/null 2>&1; then
         opencode_path=$(which opencode)
 
-        ## Check the installed version
+        ## Check installed version
         installed_version=$(opencode --version 2>/dev/null || echo "")
 
         if [[ "$installed_version" != "$specific_version" ]]; then
@@ -272,7 +273,6 @@ download_with_progress() {
     printf "\033[?25l" >&4
 
     trap "trap - RETURN; rm -f \"$tracefile\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
-
     (
         curl --trace-ascii "$tracefile" -s -L -o "$output" "$url"
     ) &
@@ -312,7 +312,7 @@ download_with_progress() {
 }
 
 download_and_install() {
-    print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}version: ${NC}$specific_version"
+    print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}(dra11y fork - linear retry) ${NC}version: ${NC}$specific_version"
     local tmp_dir="${TMPDIR:-/tmp}/opencode_install_$$"
     mkdir -p "$tmp_dir"
 
@@ -333,7 +333,7 @@ download_and_install() {
 }
 
 install_from_binary() {
-    print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}from: ${NC}$binary_path"
+    print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}(dra11y fork) ${MUTED}from: ${NC}$binary_path"
     cp "$binary_path" "${INSTALL_DIR}/opencode"
     chmod 755 "${INSTALL_DIR}/opencode"
 }
@@ -353,11 +353,11 @@ add_to_path() {
     if grep -Fxq "$command" "$config_file"; then
         print_message info "Command already exists in $config_file, skipping write."
     elif [[ -w $config_file ]]; then
-        echo -e "\n# opencode" >> "$config_file"
+        echo -e "\n# opencode (dra11y fork with linear retry)" >> "$config_file"
         echo "$command" >> "$config_file"
-        print_message info "${MUTED}Successfully added ${NC}opencode ${MUTED}to \$PATH in ${NC}$config_file"
+        print_message info "${MUTED}Successfully added ${NC}opencode (dra11y fork) ${MUTED}to \$PATH in ${NC}$config_file"
     else
-        print_message warning "Manually add the directory to $config_file (or similar):"
+        print_message warning "Manually add to $config_file (or similar):"
         print_message info "  $command"
     fi
 }
@@ -418,7 +418,7 @@ if [[ "$no_modify_path" != "true" ]]; then
             ;;
             *)
                 export PATH=$INSTALL_DIR:$PATH
-                print_message warning "Manually add the directory to $config_file (or similar):"
+                print_message warning "Manually add to $config_file (or similar):"
                 print_message info "  export PATH=$INSTALL_DIR:\$PATH"
             ;;
         esac
@@ -431,17 +431,20 @@ if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
 fi
 
 echo -e ""
-echo -e "${MUTED}                    ${NC}             ▄     "
-echo -e "${MUTED}█▀▀█ █▀▀█ █▀▀█ █▀▀▄ ${NC}█▀▀▀ █▀▀█ █▀▀█ █▀▀█"
+echo -e "${MUTED}                   ${NC}             ▄     "
+echo -e "${MUTED}█▀▀█ █▀▀█ █▀▀▄ ${NC}█▀▀▀ █▀▀█ █▀▀█ █▀▀█"
 echo -e "${MUTED}█░░█ █░░█ █▀▀▀ █░░█ ${NC}█░░░ █░░█ █░░█ █▀▀▀"
 echo -e "${MUTED}▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"
 echo -e ""
+echo -e ""
+echo -e "${MUTED}This is dra11y's fork with linear retry patch (2-second constant retry)${NC}"
 echo -e ""
 echo -e "${MUTED}OpenCode includes free models, to start:${NC}"
 echo -e ""
 echo -e "cd <project>  ${MUTED}# Open directory${NC}"
 echo -e "opencode      ${MUTED}# Run command${NC}"
 echo -e ""
-echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/docs"
+echo -e ""
+echo -e "${MUTED}For more information visit ${NC}https://github.com/dra11y/opencode"
 echo -e ""
 echo -e ""
