@@ -53,6 +53,7 @@ jobs:
           fi
 
       - name: Commit and push
+        run: |
           git add packages/opencode/src/session/retry.ts
           git commit -m "Apply linear retry patch" || echo "No changes to commit"
           git push origin linear-retry
