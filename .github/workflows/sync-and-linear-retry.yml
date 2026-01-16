@@ -39,9 +39,8 @@ jobs:
 
       - name: Apply linear retry patch
         run: |
-          # Insert return RETRY_INITIAL_DELAY after the function declaration line
-          # Pattern: export function delay(attempt: number, error?: MessageV2.APIError) {
-          sed -i '/export function delay(attempt: number, error?: MessageV2.APIError) {/a\  return RETRY_INITIAL_DELAY' packages/opencode/src/session/retry.ts
+          # Add early return to bypass all header logic and exponential backoff
+          sed -i '27a\  return RETRY_INITIAL_DELAY' packages/opencode/src/session/retry.ts
 
       - name: Verify patch applied
         run: |
