@@ -25,7 +25,7 @@ export namespace SessionRetry {
   }
 
   export function delay(attempt: number, error?: MessageV2.APIError) {
-  return RETRY_INITIAL_DELAY
+    return RETRY_INITIAL_DELAY
     if (error) {
       const headers = error.data.responseHeaders
       if (headers) {
