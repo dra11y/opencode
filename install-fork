@@ -1,0 +1,228 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Configuration
+REPO_URL="https://github.com/dra11y/opencode.git"
+REPO_BRANCH="linear-retry"
+INSTALL_DIR="$HOME/.opencode"
+TEMP_DIR="/tmp/opencode-install"
+BACKUP_DIR="/tmp/opencode-backup"
+echo "🔧 Installing opencode from $REPO_URL ($REPO_BRANCH branch)"
+
+# 1. Pre-flight Checks
+echo ""
+echo "📋 Checking prerequisites..."
+
+# Check bun version
+if ! command -v bun &> /dev/null; then
+  echo "❌ Error: bun is not installed"
+  echo "Install bun from https://bun.sh"
+  exit 1
+fi
+
+BUN_VERSION=$(bun --version | sed 's/bun //')
+
+# Read required version from package.json
+if [ ! -f "package.json" ]; then
+  echo "❌ Error: package.json not found"
+  echo "Failed to read required bun version"
+  exit 1
+fi
+
+REQUIRED_BUN_VERSION=$(cat package.json | grep -o '"packageManager": "bun@[^"]*"' | sed 's/"packageManager": "bun@//' | sed 's/"//')
+
+if [ -z "$REQUIRED_BUN_VERSION" ]; then
+  echo "❌ Error: Could not extract bun version from package.json"
+  exit 1
+fi
+
+REQUIRED_VERSION_MAJOR=$(echo "$REQUIRED_BUN_VERSION" | cut -d. -f1 | cut -d@ -f1)
+REQUIRED_VERSION_MINOR=$(echo "$REQUIRED_BUN_VERSION" | cut -d. -f2)
+ACTUAL_VERSION_MAJOR=$(echo "$BUN_VERSION" | cut -d. -f1 | cut -d@ -f1)
+ACTUAL_VERSION_MINOR=$(echo "$BUN_VERSION" | cut -d. -f2)
+
+if [ "$ACTUAL_VERSION_MAJOR" -lt "$REQUIRED_VERSION_MAJOR" ] || \
+   ([ "$ACTUAL_VERSION_MAJOR" -eq "$REQUIRED_VERSION_MAJOR" ] && [ "$ACTUAL_VERSION_MINOR" -lt "$REQUIRED_VERSION_MINOR" ]); then
+  echo "❌ Error: bun version $BUN_VERSION is too old"
+  echo "Required: bun >= $REQUIRED_BUN_VERSION"
+  echo "Update bun: curl -fsSL https://bun.sh/install | bash"
+  exit 1
+fi
+
+echo "✅ Bun version: $BUN_VERSION"
+
+# Detect platform
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m)
+
+# Determine platform directory
+PLATFORM_DIR="opencode-$OS-$ARCH"
+
+# Validate platform directory format
+if [[ ! "$PLATFORM_DIR" =~ ^opencode-(darwin|linux|windows)-(arm64|x64)$ ]]; then
+  echo "❌ Error: Invalid platform directory: $PLATFORM_DIR"
+  echo "Expected format: opencode-(darwin|linux|windows)-(arm64|x64)"
+  echo "Detected: OS=$OS, ARCH=$ARCH"
+  exit 1
+fi
+
+echo "✅ Detected platform: $OS $ARCH (will use $PLATFORM_DIR)"
+
+# 2. Clone and Build Fork
+echo ""
+echo "🔨 Cloning repository..."
+
+# Clean up temp directory
+rm -rf "$TEMP_DIR"
+mkdir -p "$TEMP_DIR"
+
+# Clone repository
+if ! git clone "$REPO_URL" "$TEMP_DIR" 2>/dev/null; then
+  echo "❌ Error: Failed to clone repository"
+  echo "Please check your internet connection and try again"
+  exit 1
+fi
+
+echo "✅ Cloned repository"
+
+# Checkout branch
+cd "$TEMP_DIR"
+if ! git checkout "$REPO_BRANCH" 2>/dev/null; then
+  echo "❌ Error: Branch $REPO_BRANCH not found"
+  echo "Available branches:"
+  git branch -a
+  exit 1
+fi
+
+echo "✅ Checked out $REPO_BRANCH branch"
+
+# Install dependencies from ROOT
+echo ""
+echo "📦 Installing dependencies..."
+bun install
+
+# Build for current platform only
+echo ""
+echo "🏗️ Building opencode for current platform..."
+cd packages/opencode
+
+if ! bun run build --single; then
+  echo "❌ Error: Build failed"
+  echo "Please check the error messages above"
+  # Restore backup
+  if [ -d "$BACKUP_DIR" ]; then
+    echo "Restoring previous installation..."
+    rm -rf "$INSTALL_DIR"
+    mkdir -p "$INSTALL_DIR"
+    cp -r "$BACKUP_DIR"/* "$INSTALL_DIR/"
+  fi
+  exit 1
+fi
+
+echo "✅ Build successful"
+
+# 3. Backup Existing Installation (only if build succeeded)
+echo ""
+echo "💾 Backing up existing installation..."
+
+if [ -d "$INSTALL_DIR" ]; then
+  echo "Found existing installation at $INSTALL_DIR"
+  rm -rf "$BACKUP_DIR"
+  mkdir -p "$BACKUP_DIR"
+  cp -r "$INSTALL_DIR"/* "$BACKUP_DIR/" 2>/dev/null || true
+  echo "✅ Backed up existing installation to $BACKUP_DIR"
+else
+  echo "No existing installation found"
+fi
+
+# 4. Install to ~/.opencode
+echo ""
+echo "📥 Installing to $INSTALL_DIR..."
+
+# Verify build output
+if [ ! -d "dist/$PLATFORM_DIR" ]; then
+  echo "❌ Error: Build output not found at dist/$PLATFORM_DIR"
+  echo "Available directories:"
+  ls dist/
+  exit 1
+fi
+
+# Create directory structure
+mkdir -p "$INSTALL_DIR/bin"
+
+# Copy binary
+echo "Copying binary..."
+cp "dist/$PLATFORM_DIR/bin/opencode" "$INSTALL_DIR/bin/opencode"
+chmod +x "$INSTALL_DIR/bin/opencode"
+echo "✅ Installed binary"
+
+# Copy platform package.json
+if [ -f "dist/$PLATFORM_DIR/package.json" ]; then
+  cp "dist/$PLATFORM_DIR/package.json" "$INSTALL_DIR/package.json"
+  echo "✅ Installed package.json"
+fi
+
+# 5. Restore User Configuration
+echo ""
+echo "🔧 Restoring user configuration..."
+
+if [ -d "$BACKUP_DIR" ]; then
+  # Restore all files except the new binary and package.json
+  for item in "$BACKUP_DIR"/*; do
+    filename=$(basename "$item")
+    if [ "$filename" != "bin" ] && [ "$filename" != "package.json" ]; then
+      echo "Restoring: $filename"
+      cp -r "$item" "$INSTALL_DIR/"
+    fi
+  done
+  echo "✅ Restored user configuration"
+fi
+
+# 6. Cleanup and Verify
+echo ""
+echo "🧹 Cleaning up temporary files..."
+
+# Clean up temp directory
+cd /
+rm -rf "$TEMP_DIR"
+echo "✅ Cleaned up temporary directory"
+
+# Keep backup for now in case of issues (comment out to auto-delete)
+# rm -rf "$BACKUP_DIR"
+echo "💾 Backup kept at $BACKUP_DIR (remove manually if installation works)"
+
+# Verify installation
+echo ""
+echo "✅ Verifying installation..."
+
+if ! "$INSTALL_DIR/bin/opencode" --version; then
+  echo "❌ Error: Installation verification failed"
+  echo "Binary not working properly"
+  exit 1
+fi
+
+# Check if $REPO_BRANCH patch is applied
+echo ""
+echo "🔍 Checking for $REPO_BRANCH patch..."
+
+if "$INSTALL_DIR/bin/opencode" --help 2>&1 | grep -q "$REPO_BRANCH"; then
+  echo "✅ $REPO_BRANCH patch confirmed"
+else
+  echo "⚠️  Warning: Could not verify $REPO_BRANCH patch (may not be visible in --help output)"
+fi
+
+# Success message
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "✅ Installation complete!"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "Installed opencode from $REPO_BRANCH branch"
+echo "Location: $INSTALL_DIR"
+echo "Binary: $INSTALL_DIR/bin/opencode"
+echo ""
+echo "Your configuration files have been preserved."
+echo "Backup available at: $BACKUP_DIR"
+echo ""
+echo "🎉 You can now run: opencode"
+echo ""
