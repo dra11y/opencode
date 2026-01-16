@@ -1,0 +1,46 @@
+name: Fork Sync - Linear Retry
+on:
+  schedule:
+    - cron: "0 2 * * *" # Daily at 2 AM UTC
+  workflow_dispatch:
+
+jobs:
+  sync-and-patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/anomalyco/opencode.git
+
+      - name: Fetch upstream
+        run: git fetch upstream
+
+      - name: Update dev branch
+        run: |
+          git checkout dev
+          git merge upstream/dev
+
+      - name: Switch to linear-retry branch
+        run: |
+          git checkout linear-retry || git checkout -b linear-retry dev
+
+      - name: Merge dev into linear-retry
+        run: git merge dev
+
+      - name: Apply linear retry patch
+        run: |
+          # Add early return to bypass all header logic and exponential backoff
+          sed -i '27a\  return RETRY_INITIAL_DELAY' packages/opencode/src/session/retry.ts
+
+      - name: Commit and push
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add packages/opencode/src/session/retry.ts
+          git commit -m "Apply linear retry patch" || echo "No changes to commit"
+          git push origin linear-retry
