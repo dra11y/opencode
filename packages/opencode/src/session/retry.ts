@@ -25,8 +25,10 @@ export namespace SessionRetry {
   }
 
   export function delay(attempt: number, error?: MessageV2.APIError) {
-    return RETRY_INITIAL_DELAY
-    return RETRY_INITIAL_DELAY
+    let linear_retry = true
+    if (linear_retry) {
+      return RETRY_INITIAL_DELAY
+    }
     if (error) {
       const headers = error.data.responseHeaders
       if (headers) {
@@ -84,7 +86,7 @@ export namespace SessionRetry {
         ) {
           return "Provider Server Error"
         }
-      } catch {}
+      } catch { }
     }
 
     return undefined
