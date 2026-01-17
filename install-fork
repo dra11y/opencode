@@ -7,6 +7,8 @@ REPO_BRANCH="linear-retry"
 INSTALL_DIR="$HOME/.opencode"
 TEMP_DIR="/tmp/opencode-install"
 BACKUP_DIR="/tmp/opencode-backup"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT=""
 echo "🔧 Installing opencode from $REPO_URL ($REPO_BRANCH branch)"
 
 # 1. Pre-flight Checks
@@ -68,37 +70,79 @@ fi
 
 echo "✅ Detected platform: $OS $ARCH (will use $PLATFORM_DIR)"
 
+# Check if running from opencode repository
+LOCAL_REPO=false
+if [ -f "$SCRIPT_DIR/package.json" ]; then
+  REPO_NAME=$(grep '"name"' "$SCRIPT_DIR/package.json" | head -1 | sed 's/.*"name".*: *"\([^"]*\)".*/\1/')
+  if [ "$REPO_NAME" = "opencode" ]; then
+    LOCAL_REPO=true
+    echo "✅ Detected local opencode repository at $SCRIPT_DIR"
+  fi
+fi
+
 # 2. Clone and Build Fork
 echo ""
-echo "🔨 Cloning repository..."
 
-# Clean up temp directory
-rm -rf "$TEMP_DIR"
-mkdir -p "$TEMP_DIR"
-
-# Clone repository
-if ! git clone "$REPO_URL" "$TEMP_DIR" 2>/dev/null; then
-  echo "❌ Error: Failed to clone repository"
-  echo "Please check your internet connection and try again"
-  exit 1
+if [ "$LOCAL_REPO" = true ]; then
+  echo "🔨 Installing from local repository..."
+  REPO_ROOT="$SCRIPT_DIR"
+  
+  cd "$SCRIPT_DIR"
+  
+  if ! git rev-parse --git-dir > /dev/null 2>&1; then
+    echo "⚠️  Warning: Not a git repository, skipping pull"
+  else
+    if git status --porcelain 2>/dev/null | grep -q .; then
+      echo "⚠️  Warning: Working tree has uncommitted changes"
+      echo "Proceeding with current state (not pulling from origin)"
+    else
+      CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+      
+      if [ "$CURRENT_BRANCH" != "$REPO_BRANCH" ]; then
+        echo "⚠️  Warning: On branch '$CURRENT_BRANCH', not '$REPO_BRANCH'"
+        echo "Proceeding with current branch"
+      fi
+      
+      echo "🔄 Attempting to pull latest changes from origin..."
+      if ! git pull origin "$CURRENT_BRANCH" 2>/dev/null; then
+        echo "⚠️  Warning: git pull failed (origin may not exist)"
+        echo "Proceeding with current state"
+      fi
+    fi
+  fi
+  
+  echo "✅ Using local repository"
+else
+  echo "🔨 Cloning repository from GitHub..."
+  
+  rm -rf "$TEMP_DIR"
+  mkdir -p "$TEMP_DIR"
+  
+  if ! git clone "$REPO_URL" "$TEMP_DIR" 2>/dev/null; then
+    echo "❌ Error: Failed to clone repository"
+    echo "Please check your internet connection and try again"
+    exit 1
+  fi
+  
+  echo "✅ Cloned repository"
+  
+  cd "$TEMP_DIR"
+  
+  if ! git checkout "$REPO_BRANCH" 2>/dev/null; then
+    echo "❌ Error: Branch $REPO_BRANCH not found"
+    echo "Available branches:"
+    git branch -a
+    exit 1
+  fi
+  
+  echo "✅ Checked out $REPO_BRANCH branch"
+  REPO_ROOT="$TEMP_DIR"
 fi
-
-echo "✅ Cloned repository"
-
-# Checkout branch
-cd "$TEMP_DIR"
-if ! git checkout "$REPO_BRANCH" 2>/dev/null; then
-  echo "❌ Error: Branch $REPO_BRANCH not found"
-  echo "Available branches:"
-  git branch -a
-  exit 1
-fi
-
-echo "✅ Checked out $REPO_BRANCH branch"
 
 # Install dependencies from ROOT
 echo ""
 echo "📦 Installing dependencies..."
+cd "$REPO_ROOT"
 bun install
 
 # Build for current platform only
@@ -182,10 +226,11 @@ fi
 echo ""
 echo "🧹 Cleaning up temporary files..."
 
-# Clean up temp directory
-cd /
-rm -rf "$TEMP_DIR"
-echo "✅ Cleaned up temporary directory"
+if [ "$LOCAL_REPO" = false ]; then
+  cd /
+  rm -rf "$TEMP_DIR"
+  echo "✅ Cleaned up temporary directory"
+fi
 
 # Keep backup for now in case of issues (comment out to auto-delete)
 # rm -rf "$BACKUP_DIR"
@@ -217,7 +262,14 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "✅ Installation complete!"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "Installed opencode from $REPO_BRANCH branch"
+
+if [ "$LOCAL_REPO" = true ]; then
+  echo "Installed opencode from local repository"
+  echo "Source: $SCRIPT_DIR"
+else
+  echo "Installed opencode from $REPO_BRANCH branch"
+fi
+
 echo "Location: $INSTALL_DIR"
 echo "Binary: $INSTALL_DIR/bin/opencode"
 echo ""
