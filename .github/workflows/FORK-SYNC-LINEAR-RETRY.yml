@@ -37,25 +37,25 @@ jobs:
       - name: Merge dev into linear-retry
         run: git merge dev
 
-      - name: Apply linear retry patch
-        run: |
-          # Add constant 2-second retry after function declaration, before if (error) line
-          sed -i '/export function delay/,/if (error) {/ {
-            /if (error) {/i\    return RETRY_INITIAL_DELAY
-          }' packages/opencode/src/session/retry.ts
+      # - name: Apply linear retry patch
+      #   run: |
+      #     # Add constant 2-second retry after function declaration, before if (error) line
+      #     sed -i '/export function delay/,/if (error) {/ {
+      #       /if (error) {/i\    return RETRY_INITIAL_DELAY
+      #     }' packages/opencode/src/session/retry.ts
 
-      - name: Verify patch applied
-        run: |
-          # Check that the patch is applied
-          if grep -A1 "export function delay" packages/opencode/src/session/retry.ts | grep -q "return RETRY_INITIAL_DELAY"; then
-            echo "✅ Linear retry patch verified"
-          else
-            echo "❌ Linear retry patch failed"
-            exit 1
-          fi
+      # - name: Verify patch applied
+      #   run: |
+      #     # Check that the patch is applied
+      #     if grep -A1 "export function delay" packages/opencode/src/session/retry.ts | grep -q "return RETRY_INITIAL_DELAY"; then
+      #       echo "✅ Linear retry patch verified"
+      #     else
+      #       echo "❌ Linear retry patch failed"
+      #       exit 1
+      #     fi
 
-      - name: Commit and push
-        run: |
-          git add packages/opencode/src/session/retry.ts
-          git commit -m "Apply linear retry patch" || echo "No changes to commit"
-          git push origin linear-retry
+      # - name: Commit and push
+      #   run: |
+      #     git add packages/opencode/src/session/retry.ts
+      #     git commit -m "Apply linear retry patch" || echo "No changes to commit"
+      #     git push origin linear-retry
