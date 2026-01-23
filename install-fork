@@ -6,7 +6,6 @@ REPO_URL="https://github.com/dra11y/opencode.git"
 REPO_BRANCH="linear-retry"
 INSTALL_DIR="$HOME/.opencode"
 TEMP_DIR="/tmp/opencode-install"
-BACKUP_DIR="/tmp/opencode-backup"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT=""
 echo "🔧 Installing opencode from $REPO_URL ($REPO_BRANCH branch)"
@@ -86,9 +85,9 @@ echo ""
 if [ "$LOCAL_REPO" = true ]; then
   echo "🔨 Installing from local repository..."
   REPO_ROOT="$SCRIPT_DIR"
-  
+
   cd "$SCRIPT_DIR"
-  
+
   if ! git rev-parse --git-dir > /dev/null 2>&1; then
     echo "⚠️  Warning: Not a git repository, skipping pull"
   else
@@ -97,12 +96,12 @@ if [ "$LOCAL_REPO" = true ]; then
       echo "Proceeding with current state (not pulling from origin)"
     else
       CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
-      
+
       if [ "$CURRENT_BRANCH" != "$REPO_BRANCH" ]; then
         echo "⚠️  Warning: On branch '$CURRENT_BRANCH', not '$REPO_BRANCH'"
         echo "Proceeding with current branch"
       fi
-      
+
       echo "🔄 Attempting to pull latest changes from origin..."
       if ! git pull origin "$CURRENT_BRANCH" 2>/dev/null; then
         echo "⚠️  Warning: git pull failed (origin may not exist)"
@@ -110,31 +109,31 @@ if [ "$LOCAL_REPO" = true ]; then
       fi
     fi
   fi
-  
+
   echo "✅ Using local repository"
 else
   echo "🔨 Cloning repository from GitHub..."
-  
+
   rm -rf "$TEMP_DIR"
   mkdir -p "$TEMP_DIR"
-  
+
   if ! git clone "$REPO_URL" "$TEMP_DIR" 2>/dev/null; then
     echo "❌ Error: Failed to clone repository"
     echo "Please check your internet connection and try again"
     exit 1
   fi
-  
+
   echo "✅ Cloned repository"
-  
+
   cd "$TEMP_DIR"
-  
+
   if ! git checkout "$REPO_BRANCH" 2>/dev/null; then
     echo "❌ Error: Branch $REPO_BRANCH not found"
     echo "Available branches:"
     git branch -a
     exit 1
   fi
-  
+
   echo "✅ Checked out $REPO_BRANCH branch"
   REPO_ROOT="$TEMP_DIR"
 fi
@@ -153,31 +152,10 @@ cd packages/opencode
 if ! bun run build --single; then
   echo "❌ Error: Build failed"
   echo "Please check the error messages above"
-  # Restore backup
-  if [ -d "$BACKUP_DIR" ]; then
-    echo "Restoring previous installation..."
-    rm -rf "$INSTALL_DIR"
-    mkdir -p "$INSTALL_DIR"
-    cp -r "$BACKUP_DIR"/* "$INSTALL_DIR/"
-  fi
   exit 1
 fi
 
 echo "✅ Build successful"
-
-# 3. Backup Existing Installation (only if build succeeded)
-echo ""
-echo "💾 Backing up existing installation..."
-
-if [ -d "$INSTALL_DIR" ]; then
-  echo "Found existing installation at $INSTALL_DIR"
-  rm -rf "$BACKUP_DIR"
-  mkdir -p "$BACKUP_DIR"
-  cp -r "$INSTALL_DIR"/* "$BACKUP_DIR/" 2>/dev/null || true
-  echo "✅ Backed up existing installation to $BACKUP_DIR"
-else
-  echo "No existing installation found"
-fi
 
 # 4. Install to ~/.opencode
 echo ""
@@ -206,22 +184,6 @@ if [ -f "dist/$PLATFORM_DIR/package.json" ]; then
   echo "✅ Installed package.json"
 fi
 
-# 5. Restore User Configuration
-echo ""
-echo "🔧 Restoring user configuration..."
-
-if [ -d "$BACKUP_DIR" ]; then
-  # Restore all files except the new binary and package.json
-  for item in "$BACKUP_DIR"/*; do
-    filename=$(basename "$item")
-    if [ "$filename" != "bin" ] && [ "$filename" != "package.json" ]; then
-      echo "Restoring: $filename"
-      cp -r "$item" "$INSTALL_DIR/"
-    fi
-  done
-  echo "✅ Restored user configuration"
-fi
-
 # 6. Cleanup and Verify
 echo ""
 echo "🧹 Cleaning up temporary files..."
@@ -231,10 +193,6 @@ if [ "$LOCAL_REPO" = false ]; then
   rm -rf "$TEMP_DIR"
   echo "✅ Cleaned up temporary directory"
 fi
-
-# Keep backup for now in case of issues (comment out to auto-delete)
-# rm -rf "$BACKUP_DIR"
-echo "💾 Backup kept at $BACKUP_DIR (remove manually if installation works)"
 
 # Verify installation
 echo ""
@@ -274,7 +232,6 @@ echo "Location: $INSTALL_DIR"
 echo "Binary: $INSTALL_DIR/bin/opencode"
 echo ""
 echo "Your configuration files have been preserved."
-echo "Backup available at: $BACKUP_DIR"
 echo ""
 echo "🎉 You can now run: opencode"
 echo ""

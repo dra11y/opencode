@@ -63,35 +63,35 @@ const startEventStream = (directory: string) => {
     signal,
   })
 
-  ;(async () => {
-    while (!signal.aborted) {
-      const events = await Promise.resolve(
-        sdk.event.subscribe(
-          {},
-          {
-            signal,
-          },
-        ),
-      ).catch(() => undefined)
+    ; (async () => {
+      while (!signal.aborted) {
+        const events = await Promise.resolve(
+          sdk.event.subscribe(
+            {},
+            {
+              signal,
+            },
+          ),
+        ).catch(() => undefined)
 
-      if (!events) {
-        await Bun.sleep(250)
-        continue
-      }
+        if (!events) {
+          await Bun.sleep(250)
+          continue
+        }
 
-      for await (const event of events.stream) {
-        Rpc.emit("event", event as Event)
-      }
+        for await (const event of events.stream) {
+          Rpc.emit("event", event as Event)
+        }
 
-      if (!signal.aborted) {
-        await Bun.sleep(250)
+        if (!signal.aborted) {
+          await Bun.sleep(250)
+        }
       }
-    }
-  })().catch((error) => {
-    Log.Default.error("event stream error", {
-      error: error instanceof Error ? error.message : error,
+    })().catch((error) => {
+      Log.Default.error("event stream error", {
+        error: error instanceof Error ? error.message : error,
+      })
     })
-  })
 }
 
 startEventStream(process.cwd())
@@ -122,13 +122,13 @@ export const rpc = {
     return { url: server.url.toString() }
   },
   async checkUpgrade(input: { directory: string }) {
-    await Instance.provide({
-      directory: input.directory,
-      init: InstanceBootstrap,
-      fn: async () => {
-        await upgrade().catch(() => {})
-      },
-    })
+    // await Instance.provide({
+    //   directory: input.directory,
+    //   init: InstanceBootstrap,
+    //   fn: async () => {
+    //     await upgrade().catch(() => {})
+    //   },
+    // })
   },
   async reload() {
     Config.global.reset()

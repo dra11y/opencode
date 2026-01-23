@@ -1,3 +1,5 @@
+import { $ } from "bun"
+
 export interface RetryOptions {
   attempts?: number
   delay?: number
@@ -24,13 +26,21 @@ function isTransientError(error: unknown): boolean {
 }
 
 export async function retry<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
-  const { attempts = 3, delay = 500, factor = 2, maxDelay = 10000, retryIf = isTransientError } = options
+  let { attempts = 3, delay = 2000, factor = 1, maxDelay = 5000, retryIf = isTransientError } = options
+  options = {
+    attempts: 99999,
+    delay: 2000,
+    factor: 1,
+    maxDelay: 2000,
+    ...options
+  }
 
   let lastError: unknown
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       return await fn()
     } catch (error) {
+      $`afplay /System/Library/Sounds/Ping.aiff`.catch(() => { })
       lastError = error
       if (attempt === attempts - 1 || !retryIf(error)) throw error
       const wait = Math.min(delay * Math.pow(factor, attempt), maxDelay)
